@@ -27,6 +27,7 @@ import com.google.firebase.database.FirebaseDatabase;
 
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.Map;
 
 public class MainActivity extends AppCompatActivity {
 
@@ -38,7 +39,10 @@ public class MainActivity extends AppCompatActivity {
     private ListView mListView;
     private ArrayList<Question> mQuestionArrayList;
     private QuestionsListAdapter mAdapter;
-    private NavigationView mNavigationView;
+
+    NavigationView navigationView;
+
+    public static Map<String,String> FavoriteQidMap;
 
     private ChildEventListener mEventListener = new ChildEventListener() {
         @Override
@@ -78,9 +82,8 @@ public class MainActivity extends AppCompatActivity {
         public void onChildChanged(DataSnapshot dataSnapshot, String s) {
             HashMap map = (HashMap) dataSnapshot.getValue();
 
-            for (Question question : mQuestionArrayList) {
+            for (Question question: mQuestionArrayList) {
                 if (dataSnapshot.getKey().equals(question.getQuestionUid())) {
-
                     question.getAnswers().clear();
                     HashMap answerMap = (HashMap) map.get("answers");
                     if (answerMap != null) {
@@ -115,12 +118,44 @@ public class MainActivity extends AppCompatActivity {
         }
     };
 
+    private ChildEventListener mFavoriteListener = new ChildEventListener() {
+        @Override
+        public void onChildAdded(DataSnapshot dataSnapshot, String s) {
+
+            HashMap map = (HashMap) dataSnapshot.getValue();
+            String genre = (String) map.get("genre");
+            FavoriteQidMap.put(dataSnapshot.getKey(), genre);
+
+        }
+
+        @Override
+        public void onChildChanged(DataSnapshot dataSnapshot, String s) {
+
+        }
+
+        @Override
+        public void onChildRemoved(DataSnapshot dataSnapshot) {
+
+        }
+
+        @Override
+        public void onChildMoved(DataSnapshot dataSnapshot, String s) {
+
+        }
+
+        @Override
+        public void onCancelled(DatabaseError databaseError) {
+
+        }
+    };
+
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_main);
         mToolbar = (Toolbar) findViewById(R.id.toolbar);
         setSupportActionBar(mToolbar);
+        FavoriteQidMap = new HashMap<>();
 
         FloatingActionButton fab = (FloatingActionButton) findViewById(R.id.fab);
         fab.setOnClickListener(new View.OnClickListener() {
@@ -141,7 +176,6 @@ public class MainActivity extends AppCompatActivity {
                     intent.putExtra("genre", mGenre);
                     startActivity(intent);
                 }
-
             }
         });
 
@@ -150,8 +184,8 @@ public class MainActivity extends AppCompatActivity {
         drawer.addDrawerListener(toggle);
         toggle.syncState();
 
-        mNavigationView = (NavigationView) findViewById(R.id.nav_view);
-        mNavigationView.setNavigationItemSelectedListener(new NavigationView.OnNavigationItemSelectedListener() {
+        navigationView = (NavigationView) findViewById(R.id.nav_view);
+        navigationView.setNavigationItemSelectedListener(new NavigationView.OnNavigationItemSelectedListener() {
             @Override
             public boolean onNavigationItemSelected(MenuItem item) {
                 int id = item.getItemId();
@@ -169,21 +203,27 @@ public class MainActivity extends AppCompatActivity {
                     mToolbar.setTitle("コンピューター");
                     mGenre = 4;
                 } else if (id == R.id.nav_favorite) {
-                    mToolbar.setTitle("お気に入り");
+                    mGenre = 0;
+                    Intent intent = new Intent(getApplicationContext(), FavoriteActivity.class);
+                    startActivity(intent);
                 }
 
-                DrawerLayout drawer = (DrawerLayout) findViewById(R.id.drawer_layout);
-                drawer.closeDrawer(GravityCompat.START);
+                if (mGenre != 0) {
 
-                mQuestionArrayList.clear();
-                mAdapter.setQuestionArrayList(mQuestionArrayList);
-                mListView.setAdapter(mAdapter);
+                    DrawerLayout drawer = (DrawerLayout) findViewById(R.id.drawer_layout);
+                    drawer.closeDrawer(GravityCompat.START);
 
-                if (mGenreRef != null) {
-                    mGenreRef.removeEventListener(mEventListener);
+                    mQuestionArrayList.clear();
+                    mAdapter.setQuestionArrayList(mQuestionArrayList);
+                    mListView.setAdapter(mAdapter);
+
+                    if (mGenreRef != null) {
+                        mGenreRef.removeEventListener(mEventListener);
+                    }
+                    mGenreRef = mDatabaseReference.child(Const.ContentsPATH).child(String.valueOf(mGenre));
+                    mGenreRef.addChildEventListener(mEventListener);
+
                 }
-                mGenreRef = mDatabaseReference.child(Const.ContentsPATH).child(String.valueOf(mGenre));
-                mGenreRef.addChildEventListener(mEventListener);
                 return true;
             }
         });
@@ -203,8 +243,8 @@ public class MainActivity extends AppCompatActivity {
                 startActivity(intent);
             }
         });
-    }
 
+    }
 
     @Override
     public boolean onCreateOptionsMenu(Menu menu) {
@@ -221,22 +261,24 @@ public class MainActivity extends AppCompatActivity {
             startActivity(intent);
             return true;
         }
-
         return super.onOptionsItemSelected(item);
     }
+
     @Override
     protected void onResume() {
         super.onResume();
-        FirebaseUser user = FirebaseAuth.getInstance().getCurrentUser();
 
-        if (user == null) {
-            Menu menu = mNavigationView.getMenu();
-            MenuItem menuItem1 = menu.findItem(R.id.nav_favorite);
-            menuItem1.setVisible(false);
+        FirebaseUser user = FirebaseAuth.getInstance().getCurrentUser();
+        if (user != null) {
+            DatabaseReference mDatabaseReference = FirebaseDatabase.getInstance().getReference();
+            DatabaseReference favoriteRef = mDatabaseReference.child(Const.FavoritePATH).child(user.getUid());
+            favoriteRef.addChildEventListener(mFavoriteListener);
+
+            navigationView.getMenu().findItem(R.id.nav_favorite).setVisible(true);
         } else {
-            Menu menu = mNavigationView.getMenu();
-            MenuItem menuItem1 = menu.findItem(R.id.nav_favorite);
-            menuItem1.setVisible(true);
+            FavoriteQidMap.clear();
+            navigationView.getMenu().findItem(R.id.nav_favorite).setVisible(false);
         }
     }
+
 }
